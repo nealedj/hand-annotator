@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Request } from '@playwright/test';
+import { chip, clickJoint, dragArtwork, joint } from './helpers';
 
 const BRIEF_CSP =
   "default-src 'self'; connect-src 'none'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'";
@@ -52,9 +53,23 @@ test('makes no network requests after load, leaves no storage and never changes 
   const requests = await loadAndRecord(page);
   const startUrl = page.url();
 
-  // Placeholder flow: interact with the page. Extended with the full flow in later milestones.
-  await page.mouse.click(200, 200);
-  await page.keyboard.press('Tab');
+  // A full marking flow across two views: place, tag, drag, resize, undo, redo, delete.
+  await clickJoint(page, 'right-palmar', 'index-pip');
+  await chip(page, /Swelling/).click();
+  await page.keyboard.press('Enter');
+  const pip = joint('right-palmar', 'index-pip');
+  await dragArtwork(page, [pip.x, pip.y], [pip.x + 20, pip.y + 90]);
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await page.getByRole('button', { name: /^Left hand/ }).click();
+  await page.getByRole('button', { name: /^Dorsal/ }).click();
+  await clickJoint(page, 'left-dorsal', 'thumb-cmc');
+  await chip(page, /Wound/).click();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Delete');
+  await page.getByRole('button', { name: 'Snap to joints' }).click();
+  await clickJoint(page, 'left-dorsal', 'radiocarpal');
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
 
   expect(requests.map((r) => r.url())).toEqual([]);

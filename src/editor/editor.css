@@ -1,0 +1,483 @@
+/* Neutral chrome, so the issue colours are the only strong colours on screen. */
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.button,
+.segment,
+.tool,
+.view-link {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled),
+.segment:hover,
+.tool:hover:not(:disabled),
+.view-link:hover {
+  background: #eef0f2;
+}
+
+.button:disabled,
+.tool:disabled {
+  color: #6b7178;
+  cursor: not-allowed;
+  background: #f1f2f3;
+}
+
+.button.primary {
+  background: #1f2328;
+  border-color: #1f2328;
+  color: #fff;
+}
+
+.button.primary:hover:not(:disabled) {
+  background: #3a4048;
+}
+
+.button.primary:disabled {
+  background: #d5d8dc;
+  border-color: #d5d8dc;
+  color: #4a5058;
+}
+
+.button.danger {
+  border-color: #a4331b;
+  color: #a4331b;
+}
+
+/* ---- Top bar and toolbar ---------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.selectors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.segmented {
+  display: inline-flex;
+}
+
+.segmented .segment {
+  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.segmented .segment:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.segmented .segment:last-child {
+  border-radius: 0 6px 6px 0;
+  margin-left: -1px;
+}
+
+.segment[aria-pressed='true'] {
+  background: #1f2328;
+  border-color: #1f2328;
+  color: #fff;
+  position: relative;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 1.5rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #e1e4e8;
+  color: #1f2328;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+  text-align: center;
+}
+
+.badge:empty {
+  display: none;
+}
+
+.badge.empty {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.tool[aria-pressed='true'] {
+  background: #e3e8ef;
+  border-color: #4a5058;
+  font-weight: 600;
+}
+
+/* ---- Workspace -------------------------------------------------------------------- */
+
+.workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  align-items: start;
+}
+
+.diagram-wrap {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: calc(100vh - 11rem);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.diagram:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+/* Snap dots: on hover (mouse), or always while marking on touch screens. Editor only. */
+.snap-dot {
+  fill: #4a5058;
+  stroke: #fff;
+  stroke-width: 3;
+  opacity: 0;
+  transition: opacity 120ms;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .diagram-wrap:hover .snap-dot {
+    opacity: 0.55;
+  }
+}
+
+@media (pointer: coarse) {
+  .snap-dot {
+    opacity: 0.55;
+  }
+}
+
+.diagram-wrap.snap-off .snap-dot {
+  opacity: 0;
+}
+
+.mark {
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+
+.mark-hit {
+  fill: transparent;
+}
+
+.mark:focus-visible .mark-hit {
+  stroke: var(--focus);
+  stroke-width: 6;
+}
+
+.selection-ring {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 3;
+  stroke-dasharray: 10 7;
+  pointer-events: none;
+}
+
+.resize-handle {
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.handle-hit {
+  fill: transparent;
+}
+
+.handle-dot {
+  fill: #fff;
+  stroke: var(--focus);
+  stroke-width: 4;
+}
+
+/* ---- Side panel ------------------------------------------------------------------- */
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.side-panel section {
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.side-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.view-list,
+.legend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.view-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.view-link {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.view-link[aria-current='true'] {
+  border-color: #4a5058;
+  font-weight: 600;
+}
+
+.legend {
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.legend li {
+  display: grid;
+  grid-template-columns: 1.1rem 1.8rem 1fr;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.legend-code,
+.chip-code {
+  font-weight: 700;
+}
+
+.swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid #1f2328;
+  flex: none;
+}
+
+.swatch-pain { background: #D55E00; }
+.swatch-oedema { background: #0072B2; }
+.swatch-stiffness { background: #E69F00; }
+.swatch-sensation { background: #CC79A7; }
+.swatch-deformity { background: #000000; }
+.swatch-weakness { background: #56B4E9; }
+.swatch-scar { background: #009E73; }
+.swatch-triggering { background: #F0E442; }
+
+/* ---- Popover ---------------------------------------------------------------------- */
+
+.popover {
+  position: absolute;
+  z-index: 10;
+  width: 22rem;
+  max-width: calc(100% - 16px);
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid #b9bec4;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(31 35 40 / 0.18);
+}
+
+.popover[hidden] {
+  display: none;
+}
+
+.popover-title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.popover-hint {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.chips {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 44px;
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+  font-size: 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: #f1f2f3;
+}
+
+.chip[aria-pressed='true'] {
+  background: #e3e8ef;
+  border: 2px solid #1f2328;
+  padding: calc(0.4rem - 1px) calc(0.75rem - 1px);
+  font-weight: 600;
+}
+
+.chip-code {
+  min-width: 1.6rem;
+}
+
+.popover-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+/* ---- Narrow screens (phones) ------------------------------------------------------ */
+
+@media (max-width: 760px) {
+  .topbar {
+    padding: 0.5rem 16px;
+    gap: 0.5rem;
+  }
+
+  .topbar-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .topbar-actions .button {
+    flex: 1;
+    padding: 0.5rem;
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0.75rem 16px 5.5rem;
+  }
+
+  .diagram {
+    max-height: none;
+  }
+
+  /* Toolbar at the bottom, within thumb reach. */
+  .toolbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    justify-content: space-around;
+    padding: 0.5rem 8px calc(0.5rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
+  }
+
+  .tool {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.9rem;
+  }
+
+  /* Popover becomes a bottom sheet. */
+  .popover {
+    position: fixed;
+    left: 0 !important;
+    right: 0;
+    top: auto !important;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    max-height: 75vh;
+    overflow-y: auto;
+    z-index: 30;
+    border-radius: 14px 14px 0 0;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .chips {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .chip-name {
+    font-size: 0.8rem;
+  }
+}

@@ -3,6 +3,7 @@ import './review.css';
 import { jointsFor, VIEWBOX, type Joint } from './data/joints';
 import { handArtwork, viewLabelText } from './render/artwork';
 import { FONT_STACK, svg } from './render/svg';
+import { el } from './editor/dom';
 import { ulnarDirection, viewKey, viewLabel, VIEWS, type View } from './views';
 
 /**
@@ -61,12 +62,6 @@ function jointMarker(view: View, joint: Joint, n: number): SVGGElement {
       [String(n)],
     ),
   ]);
-}
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, children: (Node | string)[] = []) {
-  const e = Object.assign(document.createElement(tag), props);
-  e.append(...children);
-  return e;
 }
 
 function viewSection(view: View): HTMLElement {

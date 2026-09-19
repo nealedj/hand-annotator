@@ -1,6 +1,6 @@
 # 0002 — Hand artwork and joint map
 
-Status: Proposed (awaiting clinical sign-off at milestone 2)
+Status: Accepted (clinical sign-off by product owner, 2026-09-19)
 Date: 2026-09-19
 
 ## Context
