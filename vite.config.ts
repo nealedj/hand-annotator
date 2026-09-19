@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
 /**
@@ -25,6 +26,13 @@ export default defineConfig({
     // Never inline assets as data URIs we didn't intend; keeps the output auditable.
     assetsInlineLimit: 0,
     sourcemap: false,
+    rolldownOptions: {
+      input: {
+        main: fileURLToPath(new URL('index.html', import.meta.url)),
+        // Milestone 2 clinical review page: all eight views with their snap points.
+        review: fileURLToPath(new URL('review.html', import.meta.url)),
+      },
+    },
   },
   test: {
     include: ['tests/unit/**/*.test.ts'],
