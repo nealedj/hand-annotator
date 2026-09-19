@@ -1,0 +1,27 @@
+{
+  "name": "hand-map",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static, browser-only tool for marking problem areas on a hand diagram and exporting a PNG.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "test:all": "npm run typecheck && npm run test:unit && npm run build && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "npx": "^10.2.2"
+  }
+}
