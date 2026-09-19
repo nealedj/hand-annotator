@@ -1,8 +1,7 @@
 import { expect, test, type Page, type Request } from '@playwright/test';
 import { chip, clickJoint, dragArtwork, joint } from './helpers';
 
-const BRIEF_CSP =
-  "default-src 'self'; connect-src 'none'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'";
+import { APP_CSP, BRIEF_CSP } from '../csp';
 
 /** Loads the app and returns every request made after the load event. */
 async function loadAndRecord(page: Page): Promise<Request[]> {
@@ -29,12 +28,13 @@ async function storageSnapshot(page: Page) {
   }));
 }
 
-test('production build serves the brief CSP unchanged', async ({ page }) => {
-  await page.goto('./');
-  const csp = await page
-    .locator('meta[http-equiv="Content-Security-Policy"]')
-    .getAttribute('content');
-  expect(csp).toBe(BRIEF_CSP);
+test('production build serves the brief CSP, only tightened', async ({ page }) => {
+  for (const path of ['./', './review.html']) {
+    await page.goto(path);
+    const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
+    expect(csp).toBe(APP_CSP);
+    expect(csp!.startsWith(BRIEF_CSP)).toBe(true);
+  }
 });
 
 test('all app files load from the sub-path, same origin', async ({ page, baseURL }) => {
@@ -106,4 +106,39 @@ test('CSP blocks outbound connections from page scripts', async ({ page }) => {
     }
   });
   expect(blocked).toBe(true);
+});
+
+test('coming back to the page by Back or reload shows a blank app', async ({ page }) => {
+  await page.goto('./');
+  await clickJoint(page, 'right-palmar', 'index-pip');
+  await page.getByRole('dialog').getByRole('textbox').fill('Private pinned note');
+  await page.keyboard.press('Enter');
+  await page.getByRole('textbox', { name: 'General notes' }).fill('Private general notes');
+
+  // Away and back: the page may come from the back-forward cache, which must reset it.
+  await page.goto('about:blank');
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Hand Map' })).toBeVisible();
+  await expect(page.locator('svg.diagram [data-mark-id]')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'General notes' })).toHaveValue('');
+
+  // Reload: nothing is restored into the fields.
+  await page.getByRole('textbox', { name: 'General notes' }).fill('Typed before reload');
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'General notes' })).toHaveValue('');
+  await expect(page.locator('svg.diagram [data-mark-id]')).toHaveCount(0);
+});
+
+test('leaves no trace in window.name or the session history', async ({ page }) => {
+  await page.goto('./');
+  const before = await page.evaluate(() => history.length);
+  await clickJoint(page, 'right-palmar', 'index-dip');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: /^Left hand/ }).click();
+  await page.getByRole('button', { name: 'Start new diagram' }).click();
+  expect(await page.evaluate(() => ({ name: window.name, length: history.length, state: history.state }))).toEqual({
+    name: '',
+    length: before,
+    state: null,
+  });
 });

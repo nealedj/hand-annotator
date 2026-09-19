@@ -38,3 +38,27 @@ describe('snapping', () => {
     expect(nearestJoint(joints, (pip.x + dip.x) / 2, (pip.y + dip.y) / 2)).toBeNull();
   });
 });
+
+describe('touch-friendly snapping', () => {
+  it('a minimum snap radius widens small joints, still choosing the nearest', () => {
+    const x = pip.x + pip.r + 10;
+    expect(nearestJoint(joints, x, pip.y)).toBeNull();
+    expect(nearestJoint(joints, x, pip.y, pip.r + 20)?.id).toBe('index-pip');
+    // Between DIP and PIP with a huge minimum: the nearer one wins.
+    const nearDip = { x: dip.x + (pip.x - dip.x) * 0.3, y: dip.y + (pip.y - dip.y) * 0.3 };
+    expect(nearestJoint(joints, nearDip.x, nearDip.y, 500)?.id).toBe('index-dip');
+  });
+});
+
+describe('arrow-key navigation between joints', () => {
+  it('moves along a finger and across fingers', async () => {
+    const { jointInDirection } = await import('../../src/model/snap');
+    const at = (id: string) => joints.find((j) => j.id === id)!;
+    // Right palmar: fingertips up, thumb on the right.
+    expect(jointInDirection(joints, at('index-pip'), 'up')?.id).toBe('index-dip');
+    expect(jointInDirection(joints, at('index-pip'), 'down')?.id).toBe('index-mcp');
+    expect(jointInDirection(joints, at('middle-pip'), 'right')?.id).toBe('index-pip');
+    expect(jointInDirection(joints, at('middle-pip'), 'left')?.id).toBe('ring-pip');
+    expect(jointInDirection(joints, at('middle-dip'), 'up')).toBeNull();
+  });
+});

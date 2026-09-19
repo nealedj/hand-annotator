@@ -16,7 +16,7 @@ import {
   type Session,
   type Target,
 } from '../model/session';
-import { nearestJoint, placeAt } from '../model/snap';
+import { jointInDirection, nearestJoint, placeAt } from '../model/snap';
 import { handArtwork, viewLabelText } from '../render/artwork';
 import { markDescription, markPlace } from '../render/marks';
 import { measureText } from '../render/measure';
@@ -31,6 +31,9 @@ import { Popover, privateField, type PopoverContent } from './popover';
 
 /** Pointer travel, in screen pixels, before a press becomes a drag. */
 const DRAG_THRESHOLD = 5;
+/** Minimum snap distance and grab target, in screen pixels (a finger is about 44 px wide). */
+const MIN_SNAP_PX = { mouse: 12, touch: 24 };
+const MIN_TARGET_PX = 22;
 
 type Tool = 'mark' | 'pin';
 
@@ -58,6 +61,10 @@ export function mountEditor(root: HTMLElement): void {
   let lastType: IssueType = 'pain';
   let gesture: Gesture | null = null;
   let placedCallouts: PlacedCallout[] = [];
+  /** A mark or pin waiting for a tap or click on its new place ("Move" in the popover). */
+  let pendingMove: Target | null = null;
+  /** Keyboard cursor: the joint the arrow keys have reached while the diagram has focus. */
+  let cursor: string | null = null;
 
   const session = () => history.present;
   const findMark = (id: string | undefined | null) => session().marks.find((m) => m.id === id);
@@ -143,6 +150,25 @@ export function mountEditor(root: HTMLElement): void {
       apply({ type: 'setNote', target: popover.target, text });
       render();
     },
+    onResize: (delta) => {
+      const m = popover.target?.kind === 'mark' ? findMark(popover.target.id) : undefined;
+      if (!m) return;
+      apply({ type: 'resizeMark', id: m.id, r: displayRadius(m) + delta });
+      render();
+    },
+    onMove: () => {
+      const t = popover.target;
+      if (!t) return;
+      closePopover({ restoreFocus: false });
+      pendingMove = t;
+      announce(`Tap or click where the ${t.kind} should go. Press Escape to cancel.`);
+      render();
+    },
+    onResetCallout: () => {
+      if (!popover.target) return;
+      apply({ type: 'resetCallout', target: popover.target });
+      render();
+    },
     onDelete: () => popover.target && deleteItem(popover.target),
     onClose: () => closePopover(),
   });
@@ -195,7 +221,7 @@ export function mountEditor(root: HTMLElement): void {
       ]),
       el('div', { className: 'topbar-actions' }, [downloadButton, newButton]),
     ]),
-    el('div', { className: 'toolbar', role: 'toolbar', ariaLabel: 'Tools' }, [markTool, pinTool, snapToggle, undoButton, redoButton]),
+    el('div', { className: 'toolbar', role: 'group', ariaLabel: 'Tools' }, [markTool, pinTool, snapToggle, undoButton, redoButton]),
     el('main', { className: 'workspace' }, [
       diagramWrap,
       el('aside', { className: 'side-panel' }, [
@@ -244,7 +270,7 @@ export function mountEditor(root: HTMLElement): void {
       g.setAttribute('role', 'button');
       g.setAttribute('aria-label', markDescription(m) + (m.note?.text ? `. Note: ${m.note.text}` : ''));
       // An invisible disc makes the whole mark, not just its ring, easy to grab.
-      g.prepend(svg('circle', { cx: m.x, cy: m.y, r: displayRadius(m) + RING_WIDTH / 2, class: 'mark-hit' }));
+      g.prepend(svg('circle', { cx: m.x, cy: m.y, r: Math.max(displayRadius(m) + RING_WIDTH / 2, pxToUnits(MIN_TARGET_PX)), class: 'mark-hit' }));
       if (sameTarget(selected, { kind: 'mark', id: m.id })) g.classList.add('is-selected');
     }
     for (const g of Array.from(scene.pins.querySelectorAll<SVGGElement>('[data-pin-id]'))) {
@@ -252,7 +278,7 @@ export function mountEditor(root: HTMLElement): void {
       g.setAttribute('tabindex', '0');
       g.setAttribute('role', 'button');
       g.setAttribute('aria-label', pinDescription(p));
-      g.prepend(svg('circle', { cx: p.x, cy: p.y, r: PIN_RADIUS + 14, class: 'mark-hit' }));
+      g.prepend(svg('circle', { cx: p.x, cy: p.y, r: Math.max(PIN_RADIUS + 14, pxToUnits(MIN_TARGET_PX)), class: 'mark-hit' }));
     }
     sceneLayer.replaceChildren(...scene.layers);
     if (focusSel) sceneLayer.querySelector<SVGGElement>(focusSel)?.focus({ preventScroll: true });
@@ -260,6 +286,10 @@ export function mountEditor(root: HTMLElement): void {
 
   function renderOverlay() {
     overlayLayer.replaceChildren();
+    const joint = cursor ? jointsFor(view).find((j) => j.id === cursor) : undefined;
+    if (joint && document.activeElement === diagram) {
+      overlayLayer.append(svg('circle', { cx: joint.x, cy: joint.y, r: joint.r + 10, class: 'key-cursor' }));
+    }
     const item = find(selected);
     if (!item || !sameView(item.view, view)) return;
     if (selected!.kind === 'pin') {
@@ -322,6 +352,7 @@ export function mountEditor(root: HTMLElement): void {
     redoButton.disabled = !history.canRedo;
     diagramWrap.classList.toggle('snap-off', !snapOn || tool !== 'mark');
     diagramWrap.dataset.tool = tool;
+    diagramWrap.classList.toggle('is-moving', pendingMove !== null);
     if (document.activeElement !== generalNotes && generalNotes.value !== session().generalNotes) {
       generalNotes.value = session().generalNotes;
     }
@@ -335,10 +366,10 @@ export function mountEditor(root: HTMLElement): void {
   function popoverContent(t: Target): PopoverContent | null {
     if (t.kind === 'mark') {
       const m = findMark(t.id);
-      return m ? { title: markPlace(m), types: m.types, note: m.note?.text ?? '' } : null;
+      return m ? { title: markPlace(m), types: m.types, note: m.note?.text ?? '', calloutMoved: !!m.note?.callout } : null;
     }
     const p = findPin(t.id);
-    return p ? { title: `Pin note, ${viewLabel(p.view).toLowerCase()}`, note: p.note.text } : null;
+    return p ? { title: `Pin note, ${viewLabel(p.view).toLowerCase()}`, note: p.note.text, calloutMoved: !!p.note.callout } : null;
   }
 
   /** The screen rectangle of a mark or pin, for placing the popover beside it. */
@@ -367,6 +398,8 @@ export function mountEditor(root: HTMLElement): void {
   function setView(v: View) {
     if (popover.isOpen) closePopover({ restoreFocus: false });
     view = v;
+    cursor = null;
+    pendingMove = null;
     const item = find(selected);
     if (item && !sameView(item.view, v)) selected = null;
     render();
@@ -417,8 +450,8 @@ export function mountEditor(root: HTMLElement): void {
     render();
   }
 
-  function placeMark(x: number, y: number, snap: boolean) {
-    const p = placeAt(jointsFor(view), x, y, { snap });
+  function placeMark(x: number, y: number, snap: boolean, minSnapRadius = 0) {
+    const p = placeAt(jointsFor(view), x, y, { snap, minSnapRadius });
     const mark: Mark = { id: nextId('m'), view, ...p, types: [lastType] };
     history.begin(); // placing, tagging and noting is one undo step
     apply({ type: 'addMark', mark });
@@ -503,6 +536,8 @@ export function mountEditor(root: HTMLElement): void {
     history.reset(emptySession());
     exported = history.present;
     selected = null;
+    pendingMove = null;
+    cursor = null;
     lastType = 'pain';
     snapOn = true;
     tool = 'mark';
@@ -515,6 +550,27 @@ export function mountEditor(root: HTMLElement): void {
 
   const toArtwork = (e: { clientX: number; clientY: number }) =>
     new DOMPoint(e.clientX, e.clientY).matrixTransform(diagram.getScreenCTM()!.inverse());
+
+  /** Converts screen pixels to artwork units at the diagram's current size. */
+  function pxToUnits(px: number): number {
+    const scale = diagram.getScreenCTM()?.a;
+    return scale ? px / scale : px;
+  }
+
+  const minSnapFor = (e: PointerEvent) => pxToUnits(e.pointerType === 'mouse' ? MIN_SNAP_PX.mouse : MIN_SNAP_PX.touch);
+
+  /** Moves a mark or pin to a point; marks snap to a joint there unless snapping is off. */
+  function moveItemTo(t: Target, x: number, y: number, snap: boolean, minSnap: number) {
+    if (t.kind === 'pin') {
+      apply({ type: 'movePin', id: t.id, x, y });
+      announce('Pin moved');
+      return;
+    }
+    const joint = snap ? nearestJoint(jointsFor(view), x, y, minSnap) : null;
+    if (joint) apply({ type: 'moveMark', id: t.id, x: joint.x, y: joint.y, r: joint.r, jointId: joint.id });
+    else apply({ type: 'moveMark', id: t.id, x, y });
+    announce(`Mark moved: ${markPlace(findMark(t.id)!)}`);
+  }
 
   /** Whether an artwork point is on the drawn hand (the fills are in right-hand coordinates). */
   function onHand(x: number, y: number): boolean {
@@ -609,10 +665,26 @@ export function mountEditor(root: HTMLElement): void {
     }
   });
 
+  // After a tap, the browser sends a click to whatever is under the finger by then. When
+  // the tap has just opened the bottom sheet, that's a chip, which would toggle it.
+  let swallowClickUntil = 0;
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (performance.now() < swallowClickUntil && popover.element.contains(e.target as Node)) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      swallowClickUntil = 0;
+    },
+    true,
+  );
+
   diagram.addEventListener('pointerup', (e) => {
     if (!gesture || e.pointerId !== gesture.pointerId) return;
     const g = gesture;
     gesture = null;
+    if (e.pointerType !== 'mouse') swallowClickUntil = performance.now() + 700;
     const p = toArtwork(e);
     const snap = snapOn && !e.altKey;
 
@@ -625,13 +697,8 @@ export function mountEditor(root: HTMLElement): void {
         }
         break;
       case 'drag-item': {
-        if (g.target.kind === 'mark') {
-          const m = findMark(g.target.id)!;
-          const joint = snap ? nearestJoint(jointsFor(view), m.x, m.y) : null;
-          if (joint) apply({ type: 'moveMark', id: m.id, x: joint.x, y: joint.y, r: joint.r, jointId: joint.id });
-          else apply({ type: 'moveMark', id: m.id, x: m.x, y: m.y });
-          announce(`Mark moved: ${markPlace(findMark(g.target.id)!)}`);
-        }
+        const item = find(g.target);
+        if (item) moveItemTo(g.target, item.x, item.y, snap, minSnapFor(e));
         history.end();
         render();
         break;
@@ -642,9 +709,16 @@ export function mountEditor(root: HTMLElement): void {
         render();
         break;
       case 'press-empty': {
+        if (pendingMove) {
+          if (find(pendingMove)) moveItemTo(pendingMove, p.x, p.y, snap, minSnapFor(e));
+          selected = pendingMove;
+          pendingMove = null;
+          render();
+          break;
+        }
         if (g.closedPopover || dragged(e, g)) break; // a click away only closes the popover
         if (tool === 'pin') placePin(p.x, p.y);
-        else if (onHand(p.x, p.y)) placeMark(p.x, p.y, snap);
+        else if (onHand(p.x, p.y)) placeMark(p.x, p.y, snap, minSnapFor(e));
         else if (selected) {
           selected = null;
           render();
@@ -669,14 +743,84 @@ export function mountEditor(root: HTMLElement): void {
     return markId ? { kind: 'mark', id: markId } : { kind: 'pin', id: item.getAttribute('data-pin-id')! };
   };
 
+  const ARROWS: Record<string, 'up' | 'down' | 'left' | 'right'> = {
+    ArrowUp: 'up',
+    ArrowDown: 'down',
+    ArrowLeft: 'left',
+    ArrowRight: 'right',
+  };
+
+  function announceCursor(id: string) {
+    const j = jointsFor(view).find((x) => x.id === id)!;
+    const m = session().marks.find((x) => sameView(x.view, view) && x.jointId === id);
+    announce(m ? `${markDescription(m)}. Enter to edit.` : `${j.label}. Enter to place ${tool === 'pin' ? 'a pin' : 'a mark'}.`);
+  }
+
   diagram.addEventListener('keydown', (e) => {
     const t = targetOf(e.target);
-    if (t && (e.key === 'Enter' || e.key === ' ')) {
+    const dir = ARROWS[e.key];
+
+    // Keys on a focused mark or pin.
+    if (t) {
+      const item = find(t);
+      if (!item) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation(); // the document handler would otherwise close it again
+        openPopover(t);
+      } else if (dir) {
+        e.preventDefault();
+        if (t.kind === 'mark' && !e.altKey) {
+          // Arrows move a mark to the next joint that way; Alt+arrow nudges it freely.
+          const next = jointInDirection(jointsFor(view), item, dir);
+          if (next) moveItemTo(t, next.x, next.y, true, 0);
+        } else {
+          const step = e.shiftKey ? 40 : 10;
+          const d = { up: [0, -step], down: [0, step], left: [-step, 0], right: [step, 0] }[dir];
+          moveItemTo(t, item.x + d[0]!, item.y + d[1]!, false, 0);
+        }
+        render();
+      } else if (t.kind === 'mark' && (e.key === '+' || e.key === '=' || e.key === '-')) {
+        e.preventDefault();
+        apply({ type: 'resizeMark', id: t.id, r: displayRadius(item as Mark) + (e.key === '-' ? -8 : 8) });
+        render();
+      }
+      return;
+    }
+
+    // Keys on the diagram itself: arrows walk the joints; Enter places or opens.
+    if (e.target !== diagram) return;
+    if (dir) {
       e.preventDefault();
-      e.stopPropagation(); // the document handler would otherwise close it again
-      openPopover(t);
+      const joints = jointsFor(view);
+      const current = joints.find((j) => j.id === cursor);
+      const next = current ? jointInDirection(joints, current, dir) : joints.find((j) => j.id === 'middle-mcp')!;
+      if (next) {
+        cursor = next.id;
+        announceCursor(next.id);
+        renderOverlay();
+      }
+    } else if ((e.key === 'Enter' || e.key === ' ') && cursor) {
+      e.preventDefault();
+      e.stopPropagation();
+      const joint = jointsFor(view).find((j) => j.id === cursor)!;
+      if (pendingMove) {
+        if (find(pendingMove)) moveItemTo(pendingMove, joint.x, joint.y, true, 0);
+        pendingMove = null;
+        render();
+        return;
+      }
+      const existing = session().marks.find((m) => sameView(m.view, view) && m.jointId === cursor);
+      if (existing) openPopover({ kind: 'mark', id: existing.id });
+      else if (tool === 'pin') placePin(joint.x, joint.y);
+      else placeMark(joint.x, joint.y, true);
     }
   });
+  diagram.addEventListener('focus', () => {
+    if (!cursor) announce(`${viewLabel(view)}. Use the arrow keys to move between joints.`);
+    renderOverlay();
+  });
+  diagram.addEventListener('blur', () => renderOverlay());
   diagram.addEventListener('focusin', (e) => {
     const t = targetOf(e.target);
     if (t && !sameTarget(t, selected) && !popover.isOpen) {
@@ -703,6 +847,12 @@ export function mountEditor(root: HTMLElement): void {
     if ((e.key === 'Delete' || e.key === 'Backspace') && selected && !typing) {
       e.preventDefault();
       deleteItem(selected);
+      return;
+    }
+    if (e.key === 'Escape' && pendingMove) {
+      pendingMove = null;
+      announce('Move cancelled');
+      render();
       return;
     }
     if (e.key === 'Escape' && selected) {
@@ -737,6 +887,13 @@ export function mountEditor(root: HTMLElement): void {
   });
   window.addEventListener('pageshow', (e) => {
     if (e.persisted) resetAll();
+  });
+
+  // Hit targets are sized in screen pixels, so they depend on the diagram's size.
+  let resizeFrame = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(render);
   });
 
   render();

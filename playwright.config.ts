@@ -15,9 +15,12 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /mobile\.spec/ },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testIgnore: /mobile\.spec/ },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: /mobile\.spec/ },
+    // Phone emulation for the demonstration-quality mobile flow (real devices are a manual check).
+    { name: 'mobile-chrome', use: { ...devices['Pixel 7'] }, testMatch: /mobile\.spec/ },
+    { name: 'mobile-safari', use: { ...devices['iPhone 13'] }, testMatch: /mobile\.spec/ },
   ],
   // Tests run against the production build, never the dev server (whose CSP is relaxed for HMR).
   webServer: {

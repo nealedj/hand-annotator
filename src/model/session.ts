@@ -114,6 +114,8 @@ export type Action =
   /** Sets a mark's or pin's note text. Empty text removes a mark's note. */
   | { type: 'setNote'; target: Target; text: string }
   | { type: 'moveCallout'; target: Target; dx: number; dy: number }
+  /** Puts a dragged callout back under automatic placement. */
+  | { type: 'resetCallout'; target: Target }
   | { type: 'setGeneralNotes'; text: string };
 
 function updateMark(s: Session, id: string, f: (m: Mark) => Mark): Session {
@@ -170,6 +172,14 @@ export function reduce(s: Session, a: Action): Session {
       const callout = { dx: a.dx, dy: a.dy };
       if (a.target.kind === 'pin') return updatePin(s, a.target.id, (p) => ({ ...p, note: { ...p.note, callout } }));
       return updateMark(s, a.target.id, (m) => (m.note ? { ...m, note: { ...m.note, callout } } : m));
+    }
+    case 'resetCallout': {
+      const unpin = <T extends { note?: Note }>(x: T): T => {
+        if (!x.note?.callout) return x;
+        const { callout: _gone, ...note } = x.note;
+        return { ...x, note };
+      };
+      return a.target.kind === 'pin' ? updatePin(s, a.target.id, unpin) : updateMark(s, a.target.id, unpin);
     }
     case 'setGeneralNotes':
       return { ...s, generalNotes: a.text.slice(0, GENERAL_NOTES_MAX) };

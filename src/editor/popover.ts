@@ -5,6 +5,9 @@ import { el } from './dom';
 interface Handlers {
   onToggle: (t: IssueType) => void;
   onNote: (text: string) => void;
+  onResize: (delta: number) => void;
+  onMove: () => void;
+  onResetCallout: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -14,6 +17,8 @@ export interface PopoverContent {
   /** Issue types, for a mark. Pins have none. */
   types?: readonly IssueType[];
   note: string;
+  /** Whether the note's callout has been dragged (so it can be put back automatically). */
+  calloutMoved?: boolean;
 }
 
 /** Attributes that keep typed text out of autofill, spellcheck services and extensions. */
@@ -42,6 +47,9 @@ export class Popover {
   private readonly note: HTMLTextAreaElement;
   private readonly counter: HTMLSpanElement;
   private readonly deleteButton: HTMLButtonElement;
+  private readonly moveButton: HTMLButtonElement;
+  private readonly sizeGroup: HTMLDivElement;
+  private readonly resetButton: HTMLButtonElement;
 
   constructor(private readonly container: HTMLElement, handlers: Handlers) {
     this.heading = el('h2', { className: 'popover-title', id: 'popover-title' });
@@ -83,6 +91,15 @@ export class Popover {
     this.noteLabel = el('label', { htmlFor: 'popover-note', className: 'field-label' });
 
     this.deleteButton = el('button', { type: 'button', className: 'button danger', onclick: handlers.onDelete });
+    // Alternatives to dragging (WCAG 2.5.7): size buttons, tap-to-move, and resetting a
+    // dragged callout.
+    this.sizeGroup = el('div', { className: 'size-group', role: 'group', ariaLabel: 'Mark size' }, [
+      el('span', { className: 'field-label', ariaHidden: 'true' }, ['Size']),
+      el('button', { type: 'button', className: 'button compact', ariaLabel: 'Make mark smaller', onclick: () => handlers.onResize(-8) }, ['−']),
+      el('button', { type: 'button', className: 'button compact', ariaLabel: 'Make mark larger', onclick: () => handlers.onResize(8) }, ['+']),
+    ]);
+    this.moveButton = el('button', { type: 'button', className: 'button', onclick: handlers.onMove }, ['Move']);
+    this.resetButton = el('button', { type: 'button', className: 'button', onclick: handlers.onResetCallout }, ['Reset note position']);
     this.element = el('div', { className: 'popover', role: 'dialog', hidden: true }, [
       this.heading,
       this.hint,
@@ -91,6 +108,7 @@ export class Popover {
         el('div', { className: 'field-head' }, [this.noteLabel, this.counter]),
         this.note,
       ]),
+      el('div', { className: 'popover-tools' }, [this.sizeGroup, this.moveButton, this.resetButton]),
       el('div', { className: 'popover-actions' }, [
         this.deleteButton,
         el('button', { type: 'button', className: 'button primary', onclick: handlers.onClose }, ['Done']),
@@ -117,6 +135,8 @@ export class Popover {
       : 'Type the note for this pin. Enter or Done to finish.';
     this.noteLabel.textContent = isMark ? 'Note (optional)' : 'Note';
     this.deleteButton.textContent = isMark ? 'Delete mark' : 'Delete pin';
+    this.sizeGroup.hidden = !isMark;
+    this.moveButton.ariaLabel = isMark ? 'Move mark: then tap or click its new place' : 'Move pin: then tap or click its new place';
     this.note.value = content.note;
     this.updateCounter();
     this.element.hidden = false;
@@ -133,6 +153,7 @@ export class Popover {
   update(content: PopoverContent, anchor: DOMRect): void {
     this.heading.textContent = content.title;
     for (const [t, chip] of this.chips) chip.ariaPressed = String(!!content.types?.includes(t));
+    this.resetButton.hidden = !content.calloutMoved;
     this.position(anchor);
   }
 

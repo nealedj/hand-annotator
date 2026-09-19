@@ -27,17 +27,19 @@ button {
   min-height: 44px;
   min-width: 44px;
   padding: 0.5rem 1rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--surface);
   cursor: pointer;
 }
 
-.button:hover:not(:disabled),
-.segment:hover,
-.tool:hover:not(:disabled),
-.view-link:hover {
-  background: #eef0f2;
+@media (hover: hover) {
+  .button:hover:not(:disabled),
+  .segment:hover:not([aria-pressed='true']),
+  .tool:hover:not(:disabled),
+  .view-link:hover {
+    background: #eef0f2;
+  }
 }
 
 .button:disabled,
@@ -385,13 +387,15 @@ button {
   text-align: left;
   font-size: 0.9rem;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   cursor: pointer;
 }
 
-.chip:hover {
-  background: #f1f2f3;
+@media (hover: hover) {
+  .chip:hover {
+    background: #f1f2f3;
+  }
 }
 
 .chip[aria-pressed='true'] {
@@ -559,4 +563,138 @@ button {
 
 .popover [hidden] {
   display: none;
+}
+
+/* ---- Keyboard cursor, move mode, popover tools ------------------------------------------ */
+
+.key-cursor {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 5;
+  pointer-events: none;
+}
+
+.diagram-wrap.is-moving .diagram {
+  cursor: crosshair;
+}
+
+.diagram-wrap.is-moving {
+  outline: 3px dashed var(--focus);
+  outline-offset: -3px;
+}
+
+.popover-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.size-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.button.compact {
+  padding: 0.25rem 0.75rem;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+@media (max-width: 760px) {
+  /* Keep focused controls clear of the fixed bottom toolbar (WCAG 2.4.11). */
+  html {
+    scroll-padding-bottom: 6rem;
+  }
+
+  .app-title {
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .segmented .segment {
+    padding: 0.5rem 0.7rem;
+  }
+
+  .tool {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.85rem;
+  }
+}
+
+/* ---- Phone refinements ---------------------------------------------------------------- */
+
+@media (max-width: 760px) {
+  .selectors {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .segmented .segment {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.95rem;
+  }
+
+  .topbar-actions .button {
+    font-size: 0.95rem;
+  }
+
+  /* One row of five tools; long labels wrap inside their button. */
+  .toolbar {
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .toolbar .tool {
+    flex: 1 1 0;
+    min-width: 44px;
+    padding: 0.3rem 0.25rem;
+    font-size: 0.8rem;
+    line-height: 1.15;
+    white-space: normal;
+  }
+
+  /* The sheet's title stays visible while its contents scroll. */
+  .popover-title {
+    position: sticky;
+    top: -1rem;
+    margin: -1rem -1rem 0.25rem;
+    padding: 1rem 1rem 0.4rem;
+    background: var(--surface);
+    z-index: 1;
+  }
+
+  .chips {
+    gap: 0.35rem;
+  }
+
+  .chip {
+    gap: 0.4rem;
+    padding: 0.3rem 0.45rem;
+    font-size: 0.78rem;
+    line-height: 1.2;
+  }
+
+  .chip[aria-pressed='true'] {
+    padding: calc(0.3rem - 1px) calc(0.45rem - 1px);
+  }
+
+  .chip-code {
+    min-width: 1.2rem;
+  }
+
+  .chip-name {
+    font-size: 0.78rem;
+  }
+
+  .popover-hint {
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+  }
 }
