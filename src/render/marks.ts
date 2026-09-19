@@ -1,6 +1,6 @@
 import { jointsFor } from '../data/joints';
 import { issueInfo } from '../model/issues';
-import { CODE_FONT_SIZE, CODE_LINE_HEIGHT, displayRadius, RING_WIDTH, type Mark } from '../model/session';
+import { codeOffsets, CODE_FONT_SIZE, displayRadius, RING_WIDTH, type Mark } from '../model/session';
 import { viewLabel } from '../views';
 import { FONT_STACK, svg } from './svg';
 
@@ -37,11 +37,11 @@ function sector(cx: number, cy: number, outer: number, inner: number, a0: number
 }
 
 /**
- * Draws a mark: a ring in its issue colours (equal arcs, table order, from 12 o'clock)
- * with dark edges so light colours such as yellow stay visible, and the letter codes
- * stacked in the centre with a white halo. Used by the editor and the export alike.
+ * Draws a mark's ring: its issue colours (equal arcs, table order, from 12 o'clock)
+ * with dark edges so light colours such as yellow stay visible. Used by the editor
+ * and the export alike.
  */
-export function renderMark(m: Mark): SVGGElement {
+export function renderRing(m: Mark): SVGGElement {
   const r = displayRadius(m);
   const outer = r + RING_WIDTH / 2;
   const inner = r - RING_WIDTH / 2;
@@ -65,15 +65,21 @@ export function renderMark(m: Mark): SVGGElement {
   for (const edge of [outer, inner]) {
     g.append(svg('circle', { cx: m.x, cy: m.y, r: edge, fill: 'none', stroke: OUTLINE, 'stroke-width': OUTLINE_WIDTH }));
   }
+  return g;
+}
 
-  const top = m.y - ((n - 1) * CODE_LINE_HEIGHT) / 2;
+/** A mark's letter codes in table order in its centre (see codeOffsets), bold with a white halo. */
+export function renderCodes(m: Mark): SVGGElement {
+  const offsets = codeOffsets(m.types.length);
+  const g = svg('g', { class: 'mark-codes', 'data-codes-for': m.id });
   m.types.forEach((t, i) => {
+    const [dx, dy] = offsets[i]!;
     g.append(
       svg(
         'text',
         {
-          x: m.x,
-          y: top + i * CODE_LINE_HEIGHT,
+          x: m.x + dx,
+          y: m.y + dy,
           'text-anchor': 'middle',
           'dominant-baseline': 'central',
           'font-family': FONT_STACK,
@@ -92,8 +98,15 @@ export function renderMark(m: Mark): SVGGElement {
   return g;
 }
 
-/** All marks for one view, largest first so smaller marks sit on top and stay clickable. */
+/**
+ * All marks for one view. Rings go largest first, so smaller marks sit on top and stay
+ * clickable; every mark's codes then go above all the rings, so a neighbouring ring
+ * can never hide a letter.
+ */
 export function renderMarks(marks: readonly Mark[]): SVGGElement {
   const sorted = [...marks].sort((a, b) => displayRadius(b) - displayRadius(a));
-  return svg('g', { class: 'marks' }, sorted.map(renderMark));
+  return svg('g', { class: 'marks' }, [
+    svg('g', { class: 'mark-rings' }, sorted.map(renderRing)),
+    svg('g', { class: 'mark-code-layer', 'pointer-events': 'none' }, sorted.map(renderCodes)),
+  ]);
 }

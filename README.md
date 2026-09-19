@@ -10,8 +10,8 @@ enforces this, and automated tests in Chromium, Firefox and WebKit check it. See
 [BRIEF.md](BRIEF.md) for the full requirements and
 [docs/decisions/](docs/decisions/) for design decisions.
 
-> Status: milestone 4 of 6 (notes). PNG export and the mobile, accessibility and
-> privacy pass come next.
+> Status: milestone 5 of 6 (PNG export). The mobile, accessibility and privacy pass
+> comes next.
 
 ## Using it
 
@@ -33,7 +33,12 @@ enforces this, and automated tests in Chromium, Firefox and WebKit check it. See
 8. Callouts are placed automatically; drag one to move it, and its leader line follows.
    Click a callout to edit its note.
 9. **General notes** (up to 2,000 characters) cover the whole assessment.
-10. **Start new diagram** clears everything, including undo history, after confirming.
+10. **Download PNG** (enabled once there's a mark or pin) saves
+    `hand-diagram-YYYYMMDD-HHMM.png`: every view with a mark or pin, plus a legend of
+    the issue types used and the general notes. It's made entirely in the browser.
+    See [docs/decisions/0004-png-export.md](docs/decisions/0004-png-export.md) for
+    the dimensions.
+11. **Start new diagram** clears everything, including undo history, after confirming.
 
 Note fields turn off autocomplete and spellcheck: some browsers' enhanced spellcheck
 sends typed text to a cloud service.
@@ -66,7 +71,10 @@ npm run test:e2e   # Playwright against the production build in Chromium, Firefo
 npm run test:all   # everything, in CI order
 ```
 
-`test:e2e` needs a build first (`npm run build`). It serves `dist/` from the sub-path
+`test:e2e` needs a build first (`npm run build`). Pixel snapshots of the export run in
+Chromium on Linux only, because they depend on the installed fonts. After an
+intentional visual change, run
+`npx playwright test export-visual --project=chromium --update-snapshots=all`. It serves `dist/` from the sub-path
 `/hand-map/` to mimic GitHub Pages. First-time setup for the browsers:
 
 ```sh
@@ -118,6 +126,7 @@ src/views.ts         views, export order and view labels
 src/model/           session state, actions, undo/redo history, snapping, issue types
 src/editor/          the editor UI: layout, pointer and keyboard input, popover
 src/layout/          callout placement and text wrapping (pure, unit-tested)
+src/export/          PNG export: layout, SVG assembly, canvas encoding, download
 src/render/          SVG drawing shared by the editor, review page and export
 src/data/            joints.json: snap points per view
 src/assets/          palmar and dorsal right-hand SVGs (generated)

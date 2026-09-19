@@ -59,9 +59,42 @@ export const MAX_RADIUS = 220;
 /** Radius for a free mark placed away from any joint. */
 export const FREE_MARK_RADIUS = 36;
 
-/** The smallest radius at which `count` stacked letter codes fit inside the ring. */
-export const minRadius = (count: number): number =>
-  Math.max(MIN_RADIUS, Math.ceil((CODE_LINE_HEIGHT * Math.max(1, count) + 10) / 2 + RING_WIDTH / 2));
+/** Horizontal distance of each code column from the centre when codes sit in two columns. */
+const CODE_COLUMN_OFFSET = 18;
+/** Half the widest code ("Sc") plus its halo, in artwork units. */
+const CODE_HALF_WIDTH = 16;
+
+/**
+ * Where each letter code sits relative to the mark's centre, in table order. One or
+ * two codes are stacked; three or more go in two columns, read left to right, top to
+ * bottom, which keeps worst-case marks compact enough not to bury their neighbours.
+ */
+export function codeOffsets(count: number): [number, number][] {
+  if (count <= 2) {
+    return Array.from({ length: count }, (_, i) => [0, (i - (count - 1) / 2) * CODE_LINE_HEIGHT]);
+  }
+  const rows = Math.ceil(count / 2);
+  return Array.from({ length: count }, (_, i) => {
+    const row = Math.floor(i / 2);
+    const lastAlone = i === count - 1 && count % 2 === 1;
+    const dx = lastAlone ? 0 : (i % 2 === 0 ? -1 : 1) * CODE_COLUMN_OFFSET;
+    return [dx, (row - (rows - 1) / 2) * CODE_LINE_HEIGHT];
+  });
+}
+
+/** The smallest radius at which `count` letter codes fit inside the ring. */
+export function minRadius(count: number): number {
+  if (count <= 2) {
+    // A stacked column: its height decides.
+    return Math.max(MIN_RADIUS, Math.ceil((CODE_LINE_HEIGHT * Math.max(1, count) + 10) / 2 + RING_WIDTH / 2));
+  }
+  // Two columns: every code's box must sit inside the ring's inner edge.
+  const halfHeight = CODE_LINE_HEIGHT / 2 + 1;
+  const reach = Math.max(
+    ...codeOffsets(count).map(([dx, dy]) => Math.hypot(Math.abs(dx) + CODE_HALF_WIDTH, Math.abs(dy) + halfHeight)),
+  );
+  return Math.ceil(reach + RING_WIDTH / 2);
+}
 
 /** The radius a mark is drawn at: never so small that its codes don't fit. */
 export const displayRadius = (m: Pick<Mark, 'r' | 'types'>): number => Math.max(m.r, minRadius(m.types.length));

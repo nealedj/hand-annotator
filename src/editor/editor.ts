@@ -23,6 +23,8 @@ import { measureText } from '../render/measure';
 import { PIN_RADIUS, pinDescription } from '../render/notes';
 import { renderScene } from '../render/scene';
 import { svg } from '../render/svg';
+import { buildExportSvg, downloadBlob, renderPng } from '../export/export';
+import { exportFilename } from '../export/layout';
 import { viewKey, viewLabel, VIEWS, type Hand, type Side, type View } from '../views';
 import { el } from './dom';
 import { Popover, privateField, type PopoverContent } from './popover';
@@ -41,9 +43,14 @@ type Gesture =
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** Sets text only when it differs, so re-renders don't swap nodes under a pending click. */
+const setText = (node: Node, text: string) => {
+  if (node.textContent !== text) node.textContent = text;
+};
+
 export function mountEditor(root: HTMLElement): void {
   const history = new History<Session>(emptySession());
-  let exported: Session = history.present; // what the last export contained (milestone 5)
+  let exported: Session = history.present; // the state the last PNG was made from
   let view: View = { hand: 'right', side: 'palmar' };
   let tool: Tool = 'mark';
   let snapOn = true;
@@ -90,12 +97,8 @@ export function mountEditor(root: HTMLElement): void {
     dorsal: segment('Dorsal', () => setView({ ...view, side: 'dorsal' })),
   };
 
-  const downloadButton = el('button', {
-    type: 'button',
-    className: 'button primary',
-    disabled: true,
-    title: 'PNG export arrives in milestone 5',
-  }, ['Download PNG']);
+  const downloadButton = el('button', { type: 'button', className: 'button primary', onclick: download }, ['Download PNG']);
+  let exporting = false;
   const newButton = el('button', { type: 'button', className: 'button', onclick: startNew }, ['Start new diagram']);
 
   const toolButton = (t: Tool, label: string) =>
@@ -282,14 +285,14 @@ export function mountEditor(root: HTMLElement): void {
       const n = itemsIn({ hand, side: 'palmar' }) + itemsIn({ hand, side: 'dorsal' });
       const b = handButtons[hand];
       b.button.ariaPressed = String(view.hand === hand);
-      b.badge.textContent = n ? String(n) : '';
+      setText(b.badge, n ? String(n) : '');
       b.button.setAttribute('aria-label', `${hand === 'left' ? 'Left' : 'Right'} hand${n ? `, ${plural(n, 'item', 'items')}` : ''}`);
     }
     for (const side of ['palmar', 'dorsal'] as const) {
       const n = itemsIn({ hand: view.hand, side });
       const b = sideButtons[side];
       b.button.ariaPressed = String(view.side === side);
-      b.badge.textContent = n ? String(n) : '';
+      setText(b.badge, n ? String(n) : '');
       b.button.setAttribute('aria-label', `${side === 'palmar' ? 'Palmar' : 'Dorsal'}${n ? `, ${plural(n, 'item', 'items')}` : ''}`);
     }
     viewList.replaceChildren(
@@ -308,6 +311,13 @@ export function mountEditor(root: HTMLElement): void {
     markTool.ariaPressed = String(tool === 'mark');
     pinTool.ariaPressed = String(tool === 'pin');
     snapToggle.ariaPressed = String(snapOn);
+    const exportable = session().marks.length > 0 || session().pins.length > 0;
+    downloadButton.disabled = !exportable || exporting;
+    // Only touch the label when it changes: replacing the text node between mousedown and
+    // mouseup (a blur re-renders this) makes WebKit drop the click.
+    const label = exporting ? 'Preparing PNG…' : 'Download PNG';
+    if (downloadButton.textContent !== label) downloadButton.textContent = label;
+    downloadButton.title = exportable ? '' : 'Add a mark or pin first';
     undoButton.disabled = !history.canUndo && !history.inGesture;
     redoButton.disabled = !history.canRedo;
     diagramWrap.classList.toggle('snap-off', !snapOn || tool !== 'mark');
@@ -315,7 +325,7 @@ export function mountEditor(root: HTMLElement): void {
     if (document.activeElement !== generalNotes && generalNotes.value !== session().generalNotes) {
       generalNotes.value = session().generalNotes;
     }
-    generalCounter.textContent = `${session().generalNotes.length} / ${GENERAL_NOTES_MAX}`;
+    setText(generalCounter, `${session().generalNotes.length} / ${GENERAL_NOTES_MAX}`);
     diagram.setAttribute(
       'aria-label',
       `${viewLabel(view)} diagram. ${tool === 'mark' ? 'Click a joint or the hand to place a mark.' : 'Click anywhere to drop a pin note.'}`,
@@ -452,6 +462,30 @@ export function mountEditor(root: HTMLElement): void {
     if (!find(selected)) selected = null;
     announce('Redone');
     render();
+  }
+
+  async function download() {
+    if (exporting) return;
+    if (popover.isOpen) closePopover({ restoreFocus: false });
+    if (document.activeElement === generalNotes) generalNotes.blur();
+    const s = session();
+    if (s.marks.length === 0 && s.pins.length === 0) return;
+    exporting = true;
+    renderChrome();
+    try {
+      const { svg: image, width, height } = buildExportSvg(s, measureText);
+      const png = await renderPng(image, width, height);
+      downloadBlob(png, exportFilename());
+      exported = s;
+      announce('PNG downloaded');
+    } catch (err) {
+      console.error(err);
+      announce('The PNG could not be created');
+      window.alert('Sorry, the PNG could not be created in this browser.');
+    } finally {
+      exporting = false;
+      renderChrome();
+    }
   }
 
   function startNew() {

@@ -53,7 +53,7 @@ test('makes no network requests after load, leaves no storage and never changes 
   const requests = await loadAndRecord(page);
   const startUrl = page.url();
 
-  // A full flow across two views: place, tag, drag, undo, redo, delete, notes, pins.
+  // A full flow across two views: place, tag, drag, undo, redo, delete, notes, pins, export.
   await clickJoint(page, 'right-palmar', 'index-pip');
   await chip(page, /Swelling/).click();
   await page.keyboard.press('Enter');
@@ -77,9 +77,12 @@ test('makes no network requests after load, leaves no storage and never changes 
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'General notes' }).fill('General notes for the whole assessment.');
   await page.getByRole('button', { name: 'Mark', exact: true }).click();
+  await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download PNG' }).click()]);
   await page.waitForTimeout(250);
 
-  expect(requests.map((r) => r.url())).toEqual([]);
+  // blob: and data: URLs (the export's in-memory image and download) never leave the page.
+  const network = requests.map((r) => r.url()).filter((u) => !u.startsWith('blob:') && !u.startsWith('data:'));
+  expect(network).toEqual([]);
   expect(page.url()).toBe(startUrl);
   expect(await storageSnapshot(page)).toEqual({
     localStorage: 0,

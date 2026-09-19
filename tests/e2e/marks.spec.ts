@@ -30,7 +30,8 @@ test('tagging several types renders a segmented ring with stacked codes in table
 
   const mark = marks(page).first();
   await expect(mark).toHaveAttribute('aria-label', 'Right little DIP: pain, swelling, triggering');
-  await expect(mark.locator('text')).toHaveText(['P', 'O', 'T']);
+  const id = await mark.getAttribute('data-mark-id');
+  await expect(page.locator(`[data-codes-for="${id}"] text`)).toHaveText(['P', 'O', 'T']);
   await expect(mark.locator('path')).toHaveCount(3);
 });
 
