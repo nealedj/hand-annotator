@@ -53,7 +53,7 @@ test('makes no network requests after load, leaves no storage and never changes 
   const requests = await loadAndRecord(page);
   const startUrl = page.url();
 
-  // A full marking flow across two views: place, tag, drag, resize, undo, redo, delete.
+  // A full flow across two views: place, tag, drag, undo, redo, delete, notes, pins.
   await clickJoint(page, 'right-palmar', 'index-pip');
   await chip(page, /Swelling/).click();
   await page.keyboard.press('Enter');
@@ -69,7 +69,14 @@ test('makes no network requests after load, leaves no storage and never changes 
   await page.keyboard.press('Delete');
   await page.getByRole('button', { name: 'Snap to joints' }).click();
   await clickJoint(page, 'left-dorsal', 'radiocarpal');
+  await page.getByRole('dialog').getByRole('textbox').fill('Pinned note text typed by the clinician');
   await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Pin note' }).click();
+  await clickJoint(page, 'left-dorsal', 'index-mcp', [0, 200]);
+  await page.keyboard.type('A pin with its own note');
+  await page.keyboard.press('Enter');
+  await page.getByRole('textbox', { name: 'General notes' }).fill('General notes for the whole assessment.');
+  await page.getByRole('button', { name: 'Mark', exact: true }).click();
   await page.waitForTimeout(250);
 
   expect(requests.map((r) => r.url())).toEqual([]);

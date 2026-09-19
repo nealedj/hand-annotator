@@ -3,8 +3,21 @@ import type { View } from '../views';
 
 export interface Note {
   text: string;
-  /** Callout offset from the anchor, in artwork units. */
-  callout: { dx: number; dy: number };
+  /**
+   * Where the clinician dragged the callout: its centre's offset from the anchor, in
+   * artwork units. Absent means placed automatically (see layout/callouts.ts).
+   */
+  callout?: { dx: number; dy: number };
+}
+
+/** Pinned-note and general-note length limits. */
+export const NOTE_MAX = 200;
+export const GENERAL_NOTES_MAX = 2000;
+
+/** Something a pinned note can belong to. */
+export interface Target {
+  kind: 'mark' | 'pin';
+  id: string;
 }
 
 export interface Mark {
@@ -61,12 +74,27 @@ export type Action =
   /** Moves a mark. With jointId it's snapped there; without, it becomes a free mark. */
   | { type: 'moveMark'; id: string; x: number; y: number; r?: number; jointId?: string }
   | { type: 'resizeMark'; id: string; r: number }
-  | { type: 'deleteMark'; id: string };
+  | { type: 'deleteMark'; id: string }
+  | { type: 'addPin'; pin: Pin }
+  | { type: 'movePin'; id: string; x: number; y: number }
+  | { type: 'deletePin'; id: string }
+  /** Sets a mark's or pin's note text. Empty text removes a mark's note. */
+  | { type: 'setNote'; target: Target; text: string }
+  | { type: 'moveCallout'; target: Target; dx: number; dy: number }
+  | { type: 'setGeneralNotes'; text: string };
 
 function updateMark(s: Session, id: string, f: (m: Mark) => Mark): Session {
   if (!s.marks.some((m) => m.id === id)) return s;
   return { ...s, marks: s.marks.map((m) => (m.id === id ? f(m) : m)) };
 }
+
+function updatePin(s: Session, id: string, f: (p: Pin) => Pin): Session {
+  if (!s.pins.some((p) => p.id === id)) return s;
+  return { ...s, pins: s.pins.map((p) => (p.id === id ? f(p) : p)) };
+}
+
+/** Single-paragraph note text, within the limit. */
+export const cleanNote = (text: string): string => text.replace(/\s*\n+\s*/g, ' ').slice(0, NOTE_MAX);
 
 /** Pure state transition. Returns the same object when nothing changes. */
 export function reduce(s: Session, a: Action): Session {
@@ -88,6 +116,30 @@ export function reduce(s: Session, a: Action): Session {
       }));
     case 'deleteMark':
       return s.marks.some((m) => m.id === a.id) ? { ...s, marks: s.marks.filter((m) => m.id !== a.id) } : s;
+    case 'addPin':
+      return { ...s, pins: [...s.pins, { ...a.pin, note: { ...a.pin.note, text: cleanNote(a.pin.note.text) } }] };
+    case 'movePin':
+      return updatePin(s, a.id, (p) => ({ ...p, x: a.x, y: a.y }));
+    case 'deletePin':
+      return s.pins.some((p) => p.id === a.id) ? { ...s, pins: s.pins.filter((p) => p.id !== a.id) } : s;
+    case 'setNote': {
+      const text = cleanNote(a.text);
+      if (a.target.kind === 'pin') return updatePin(s, a.target.id, (p) => ({ ...p, note: { ...p.note, text } }));
+      return updateMark(s, a.target.id, (m) => {
+        if (text.trim() === '') {
+          const { note: _gone, ...rest } = m;
+          return rest;
+        }
+        return { ...m, note: { ...m.note, text } };
+      });
+    }
+    case 'moveCallout': {
+      const callout = { dx: a.dx, dy: a.dy };
+      if (a.target.kind === 'pin') return updatePin(s, a.target.id, (p) => ({ ...p, note: { ...p.note, callout } }));
+      return updateMark(s, a.target.id, (m) => (m.note ? { ...m, note: { ...m.note, callout } } : m));
+    }
+    case 'setGeneralNotes':
+      return { ...s, generalNotes: a.text.slice(0, GENERAL_NOTES_MAX) };
   }
 }
 

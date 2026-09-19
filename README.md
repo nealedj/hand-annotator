@@ -10,8 +10,8 @@ enforces this, and automated tests in Chromium, Firefox and WebKit check it. See
 [BRIEF.md](BRIEF.md) for the full requirements and
 [docs/decisions/](docs/decisions/) for design decisions.
 
-> Status: milestone 3 of 6 (marking). Pinned and general notes, PNG export and the
-> mobile and accessibility pass come next.
+> Status: milestone 4 of 6 (notes). PNG export and the mobile, accessibility and
+> privacy pass come next.
 
 ## Using it
 
@@ -26,7 +26,17 @@ enforces this, and automated tests in Chromium, Firefox and WebKit check it. See
    dropped on one), and drag the round handle to resize it.
 5. **Delete**/**Backspace** removes the selected mark. **Ctrl/Cmd+Z** undoes,
    **Ctrl/Cmd+Shift+Z** redoes, **Esc** closes the popover.
-6. **Start new diagram** clears everything, including undo history, after confirming.
+6. Type an optional **note** in a mark's popover (up to 200 characters). It appears as
+   a callout beside the hand, headed by the joint name for a snapped mark.
+7. With **Pin note**, click anywhere on the view to drop a pin and type its note. A pin
+   left without a note is removed.
+8. Callouts are placed automatically; drag one to move it, and its leader line follows.
+   Click a callout to edit its note.
+9. **General notes** (up to 2,000 characters) cover the whole assessment.
+10. **Start new diagram** clears everything, including undo history, after confirming.
+
+Note fields turn off autocomplete and spellcheck: some browsers' enhanced spellcheck
+sends typed text to a cloud service.
 
 ## Requirements
 
@@ -107,6 +117,7 @@ src/                 app code (TypeScript, no UI framework)
 src/views.ts         views, export order and view labels
 src/model/           session state, actions, undo/redo history, snapping, issue types
 src/editor/          the editor UI: layout, pointer and keyboard input, popover
+src/layout/          callout placement and text wrapping (pure, unit-tested)
 src/render/          SVG drawing shared by the editor, review page and export
 src/data/            joints.json: snap points per view
 src/assets/          palmar and dorsal right-hand SVGs (generated)

@@ -26,3 +26,6 @@ export const viewLabel = (v: View): string => `${v.hand.toUpperCase()} HAND — 
  * The artwork is a right hand with the thumb on the right in palmar view; left views mirror it.
  */
 export const ulnarDirection = (v: View): -1 | 1 => ((v.hand === 'right') === (v.side === 'palmar') ? -1 : 1);
+
+/** Whether a view shows the right palmar drawing mirrored (right dorsal and left palmar do). */
+export const isMirrored = (v: View): boolean => (v.hand === 'right') !== (v.side === 'palmar');

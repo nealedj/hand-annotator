@@ -1,26 +1,52 @@
 import { ISSUES, type IssueType } from '../model/issues';
-import { displayRadius, RING_WIDTH, type Mark } from '../model/session';
+import { NOTE_MAX, type Target } from '../model/session';
 import { el } from './dom';
 
 interface Handlers {
   onToggle: (t: IssueType) => void;
+  onNote: (text: string) => void;
   onDelete: () => void;
   onClose: () => void;
 }
 
+export interface PopoverContent {
+  title: string;
+  /** Issue types, for a mark. Pins have none. */
+  types?: readonly IssueType[];
+  note: string;
+}
+
+/** Attributes that keep typed text out of autofill, spellcheck services and extensions. */
+export function privateField(f: HTMLInputElement | HTMLTextAreaElement): void {
+  f.autocomplete = 'off';
+  f.spellcheck = false; // enhanced spellcheck can send text to a cloud service
+  f.setAttribute('autocapitalize', 'sentences');
+  f.setAttribute('autocorrect', 'off');
+  f.setAttribute('data-gramm', 'false');
+  f.setAttribute('data-gramm_editor', 'false');
+  f.setAttribute('data-enable-grammarly', 'false');
+}
+
 /**
- * The popover beside a mark: eight issue-type toggle chips, Delete and Done.
- * On narrow screens CSS turns it into a bottom sheet.
+ * The popover beside a mark or pin: issue-type chips (marks only), an optional note,
+ * Delete and Done. On narrow screens CSS turns it into a bottom sheet.
  */
 export class Popover {
   readonly element: HTMLDivElement;
-  markId: string | null = null;
+  target: Target | null = null;
   private readonly heading: HTMLHeadingElement;
+  private readonly chipGroup: HTMLDivElement;
+  private readonly hint: HTMLParagraphElement;
   private readonly chips = new Map<IssueType, HTMLButtonElement>();
+  private readonly noteLabel: HTMLLabelElement;
+  private readonly note: HTMLTextAreaElement;
+  private readonly counter: HTMLSpanElement;
+  private readonly deleteButton: HTMLButtonElement;
 
   constructor(private readonly container: HTMLElement, handlers: Handlers) {
     this.heading = el('h2', { className: 'popover-title', id: 'popover-title' });
-    const chipList = el(
+    this.hint = el('p', { className: 'popover-hint' });
+    this.chipGroup = el(
       'div',
       { className: 'chips', role: 'group', ariaLabel: 'Issue types' },
       ISSUES.map((i) => {
@@ -37,61 +63,100 @@ export class Popover {
         return chip;
       }),
     );
-    this.element = el(
-      'div',
-      { className: 'popover', role: 'dialog', hidden: true },
-      [
-        this.heading,
-        el('p', { className: 'popover-hint' }, ['Choose one or more issue types. Enter or Done to finish.']),
-        chipList,
-        el('div', { className: 'popover-actions' }, [
-          el('button', { type: 'button', className: 'button danger', onclick: handlers.onDelete }, ['Delete mark']),
-          el('button', { type: 'button', className: 'button primary', onclick: handlers.onClose }, ['Done']),
-        ]),
-      ],
-    );
+
+    this.note = el('textarea', {
+      id: 'popover-note',
+      className: 'note-field',
+      rows: 3,
+      maxLength: NOTE_MAX,
+      oninput: () => {
+        // Pinned notes are one paragraph; Enter finishes the popover instead.
+        const clean = this.note.value.replace(/\n/g, ' ');
+        if (clean !== this.note.value) this.note.value = clean;
+        this.updateCounter();
+        handlers.onNote(this.note.value);
+      },
+    });
+    privateField(this.note);
+    this.counter = el('span', { className: 'counter', id: 'popover-note-count' });
+    this.note.setAttribute('aria-describedby', 'popover-note-count');
+    this.noteLabel = el('label', { htmlFor: 'popover-note', className: 'field-label' });
+
+    this.deleteButton = el('button', { type: 'button', className: 'button danger', onclick: handlers.onDelete });
+    this.element = el('div', { className: 'popover', role: 'dialog', hidden: true }, [
+      this.heading,
+      this.hint,
+      this.chipGroup,
+      el('div', { className: 'note-block' }, [
+        el('div', { className: 'field-head' }, [this.noteLabel, this.counter]),
+        this.note,
+      ]),
+      el('div', { className: 'popover-actions' }, [
+        this.deleteButton,
+        el('button', { type: 'button', className: 'button primary', onclick: handlers.onClose }, ['Done']),
+      ]),
+    ]);
     this.element.setAttribute('aria-labelledby', 'popover-title');
     container.append(this.element);
   }
 
   get isOpen(): boolean {
-    return this.markId !== null;
+    return this.target !== null;
   }
 
-  open(mark: Mark, place: string, diagram: SVGSVGElement): void {
-    this.markId = mark.id;
+  isFor(t: Target | null): boolean {
+    return !!t && !!this.target && t.kind === this.target.kind && t.id === this.target.id;
+  }
+
+  open(target: Target, content: PopoverContent, anchor: DOMRect): void {
+    this.target = target;
+    const isMark = target.kind === 'mark';
+    this.chipGroup.hidden = !isMark;
+    this.hint.textContent = isMark
+      ? 'Choose one or more issue types. Enter or Done to finish.'
+      : 'Type the note for this pin. Enter or Done to finish.';
+    this.noteLabel.textContent = isMark ? 'Note (optional)' : 'Note';
+    this.deleteButton.textContent = isMark ? 'Delete mark' : 'Delete pin';
+    this.note.value = content.note;
+    this.updateCounter();
     this.element.hidden = false;
-    this.update(mark, place, diagram);
-    const first = mark.types[0];
-    (first ? this.chips.get(first) : this.chips.values().next().value)?.focus({ preventScroll: true });
+    this.update(content, anchor);
+    if (isMark) {
+      const first = content.types?.[0];
+      (first ? this.chips.get(first) : this.chips.values().next().value)?.focus({ preventScroll: true });
+    } else {
+      this.note.focus({ preventScroll: true });
+    }
   }
 
-  update(mark: Mark, place: string, diagram: SVGSVGElement): void {
-    this.heading.textContent = place;
-    for (const [t, chip] of this.chips) chip.ariaPressed = String(mark.types.includes(t));
-    this.position(mark, diagram);
+  /** Refreshes the title, chip states and position. Leaves the note alone while it's being typed. */
+  update(content: PopoverContent, anchor: DOMRect): void {
+    this.heading.textContent = content.title;
+    for (const [t, chip] of this.chips) chip.ariaPressed = String(!!content.types?.includes(t));
+    this.position(anchor);
   }
 
   close(): void {
-    this.markId = null;
+    this.target = null;
+    this.note.value = '';
     this.element.hidden = true;
   }
 
-  /** Beside the mark, on whichever side has room, kept inside the diagram area. */
-  private position(mark: Mark, diagram: SVGSVGElement): void {
-    const ctm = diagram.getScreenCTM();
-    if (!ctm) return;
+  private updateCounter(): void {
+    this.counter.textContent = `${this.note.value.length} / ${NOTE_MAX}`;
+  }
+
+  /** Beside the anchor (screen rectangle), on whichever side has room, inside the diagram area. */
+  private position(anchor: DOMRect): void {
     const box = this.container.getBoundingClientRect();
-    const reach = displayRadius(mark) + RING_WIDTH;
-    const right = new DOMPoint(mark.x + reach, mark.y).matrixTransform(ctm);
-    const left = new DOMPoint(mark.x - reach, mark.y).matrixTransform(ctm);
     const w = this.element.offsetWidth;
     const h = this.element.offsetHeight;
     const gap = 12;
-    let x = right.x - box.left + gap;
-    if (x + w > box.width - 8) x = left.x - box.left - gap - w;
+    let x = anchor.right - box.left + gap;
+    if (x + w > box.width - 8) x = anchor.left - box.left - gap - w;
     x = Math.max(8, Math.min(x, box.width - w - 8));
-    const y = Math.max(8, Math.min(right.y - box.top - h / 2, box.height - h - 8));
+    const cy = anchor.top + anchor.height / 2 - box.top;
+    const y = Math.max(8, Math.min(cy - h / 2, box.height - h - 8));
     this.element.style.left = `${x}px`;
     this.element.style.top = `${y}px`;
   }

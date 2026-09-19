@@ -167,7 +167,7 @@ test('marks belong to their view; badges count them', async ({ page }) => {
   const list = page.locator('.view-list');
   await expect(list.getByRole('button', { name: /LEFT HAND — DORSAL/ })).toContainText('2');
   await expect(list.getByRole('button', { name: /RIGHT HAND — PALMAR/ })).toContainText('1');
-  await expect(page.getByRole('button', { name: 'Right hand, 1 marks' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Right hand, 1 item' })).toBeVisible();
 });
 
 test('start new diagram asks first, then clears everything including undo history', async ({ page }) => {
